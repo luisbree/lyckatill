@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Suerte — Next.js + Genkit + Firestore",
-  description: "Proyecto TypeScript con Next.js, Firebase Firestore y Genkit",
+  title: "Suerte — Resultados de Quiniela",
+  description:
+    "Resultados de Quiniela de Ciudad, Provincia, Córdoba, Santa Fe, Mendoza, Entre Ríos y Uruguay",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
