@@ -128,9 +128,9 @@ export function AtrasosDetalle({ atrasos }: AtrasosDetalleProps) {
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <PosicionCard
-            titulo="Unidad"
-            masAtrasado={stat.unidad}
-            ranking={stat.rankingUnidad}
+            titulo="Centena"
+            masAtrasado={stat.centena}
+            ranking={stat.rankingCentena}
           />
           <PosicionCard
             titulo="Decena"
@@ -138,9 +138,9 @@ export function AtrasosDetalle({ atrasos }: AtrasosDetalleProps) {
             ranking={stat.rankingDecena}
           />
           <PosicionCard
-            titulo="Centena"
-            masAtrasado={stat.centena}
-            ranking={stat.rankingCentena}
+            titulo="Unidad"
+            masAtrasado={stat.unidad}
+            ranking={stat.rankingUnidad}
           />
         </div>
       )}
