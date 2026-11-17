@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LOTERIAS_CONFIG, TURNOS_CONFIG } from "@/lib/quiniela/config";
+import type { AtrasosPorLoteria } from "@/lib/quiniela/stats";
 import {
   LOTERIA_IDS,
   TURNO_IDS,
@@ -9,10 +10,12 @@ import {
   type SorteoDocument,
   type TurnoId,
 } from "@/lib/quiniela/types";
+import { AtrasosDetalle } from "./AtrasosDetalle";
 
 export function ResultadosBoard() {
   const [fecha, setFecha] = useState<string>("");
   const [sorteos, setSorteos] = useState<SorteoDocument[]>([]);
+  const [atrasos, setAtrasos] = useState<AtrasosPorLoteria | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SorteoDocument | null>(null);
@@ -81,6 +84,23 @@ export function ResultadosBoard() {
       cancelled = true;
     };
   }, [fecha, refreshTick]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/stats", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.atrasos) {
+          setAtrasos(data.atrasos as AtrasosPorLoteria);
+        }
+      })
+      .catch(() => {
+        // Ignorar si aún no hay conexión a Firestore
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshTick]);
 
   const byKey = useMemo(() => {
     const map = new Map<string, SorteoDocument>();
@@ -288,8 +308,55 @@ export function ResultadosBoard() {
               );
             })}
           </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50/90 dark:bg-zinc-900/60">
+              <td className="px-4 py-3.5 align-middle">
+                <div className="font-semibold text-zinc-800 dark:text-zinc-200">
+                  Más atrasados
+                </div>
+                <div className="text-[11px] text-zinc-400">
+                  Centena · Decena · Unidad
+                </div>
+              </td>
+              {LOTERIA_IDS.map((loteriaId: LoteriaId) => {
+                const stat = atrasos?.[loteriaId];
+                if (!stat) {
+                  return (
+                    <td
+                      key={loteriaId}
+                      className="px-4 py-3.5 text-center text-xs text-zinc-400"
+                    >
+                      —
+                    </td>
+                  );
+                }
+
+                const codigo = `${stat.centena.digito}${stat.decena.digito}${stat.unidad.digito}`;
+                const title = `Base: ${stat.totalSorteos} sorteos · C:${stat.centena.digito} (${stat.centena.atraso}) · D:${stat.decena.digito} (${stat.decena.atraso}) · U:${stat.unidad.digito} (${stat.unidad.atraso})`;
+
+                return (
+                  <td key={loteriaId} className="px-3 py-3 text-center">
+                    <div
+                      title={title}
+                      className="inline-flex flex-col items-center gap-0.5"
+                    >
+                      <span className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-zinc-900 dark:text-zinc-100">
+                        {codigo}
+                      </span>
+                      <span className="text-[10px] text-zinc-400">
+                        {stat.totalSorteos} sort.
+                      </span>
+                    </div>
+                  </td>
+                );
+              })}
+              <td className="px-3 py-3.5" />
+            </tr>
+          </tfoot>
         </table>
       </div>
+
+      <AtrasosDetalle atrasos={atrasos} />
 
       {/* Modal con los 20 premios o detalle de error */}
       {selected && (

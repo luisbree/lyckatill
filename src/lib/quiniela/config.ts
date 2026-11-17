@@ -103,7 +103,7 @@ export const TURNOS_CONFIG: Record<TurnoId, TurnoConfig> = {
 
 /**
  * Devuelve las loterías que participan en un turno dado.
- * En Uruguay el sorteo vespertino es solo lunes a viernes (0=dom, 6=sab).
+ * En Uruguay no hay sorteos los sábados ni domingos (0=dom, 6=sab).
  */
 export function getLoteriasParaTurno(
   turno: TurnoId,
@@ -111,7 +111,7 @@ export function getLoteriasParaTurno(
 ): LoteriaConfig[] {
   return Object.values(LOTERIAS_CONFIG).filter((loteria) => {
     if (!loteria.turnos.includes(turno)) return false;
-    if (loteria.id === "uruguay" && turno === "vespertina" && dayOfWeek === 6) {
+    if (loteria.id === "uruguay" && dayOfWeek === 6) {
       return false;
     }
     return true;

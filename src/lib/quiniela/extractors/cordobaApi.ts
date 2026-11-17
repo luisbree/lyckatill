@@ -3,12 +3,12 @@ import type { ExtractoNormalizado, LoteriaId, TurnoId } from "../types";
 const CORDOBA_API_BASE =
   "https://www.loteriadecordoba.com.ar/api/sorteos/quiniela";
 
-const TURNO_TO_CORDOBA_TIPO: Record<TurnoId, string[]> = {
-  previa: ["la previa", "previa"],
-  primera: ["primera", "la primera"],
-  matutina: ["matutino", "matutina"],
-  vespertina: ["vespertino", "vespertina"],
-  nocturna: ["nocturno", "nocturna"],
+const TURNO_TO_CORDOBA_TIPO: Record<TurnoId, string> = {
+  previa: "la previa",
+  primera: "primera",
+  matutina: "matutino",
+  vespertina: "vespertino",
+  nocturna: "nocturno",
 };
 
 const CORDOBA_LOTERIA_MATCHERS: Partial<
@@ -20,16 +20,6 @@ const CORDOBA_LOTERIA_MATCHERS: Partial<
   santa_fe: { idLoteria: 4, keywords: ["SANTA FE"] },
   entre_rios: { idLoteria: 5, keywords: ["ENTRE RIOS", "ENTRE RÍOS"] },
 };
-
-interface CordobaListaResponse {
-  data?: {
-    items?: Array<{
-      sorteo: number;
-      tipo_juego: string;
-      fecha_sorteo: string;
-    }>;
-  };
-}
 
 interface CordobaDetalleResponse {
   data?: {
@@ -48,6 +38,7 @@ interface CordobaDetalleResponse {
 /**
  * Obtiene en una sola consulta a la API JSON oficial de Lotería de Córdoba
  * los extractos de Ciudad, Provincia, Córdoba, Santa Fe y Entre Ríos para un turno.
+ * Usa `fechaTipoJuego + tipoJuego` para soportar tanto el día actual como fechas históricas.
  */
 export async function fetchLoteriaSetFromCordobaApi(
   turno: TurnoId,
@@ -55,25 +46,19 @@ export async function fetchLoteriaSetFromCordobaApi(
   loterias: LoteriaId[]
 ): Promise<Partial<Record<LoteriaId, ExtractoNormalizado>>> {
   const result: Partial<Record<LoteriaId, ExtractoNormalizado>> = {};
+  const tipoJuego = TURNO_TO_CORDOBA_TIPO[turno];
 
-  const listRes = await fetch(`${CORDOBA_API_BASE}?fecha=${fecha}`, {
+  const detailUrl = `${CORDOBA_API_BASE}?fechaTipoJuego=${fecha}&tipoJuego=${encodeURIComponent(
+    tipoJuego
+  )}`;
+
+  const detailRes = await fetch(detailUrl, {
     headers: { Accept: "application/json" },
     cache: "no-store",
     signal: AbortSignal.timeout(12000),
   });
 
-  if (!listRes.ok) {
-    throw new Error(`Córdoba API lista HTTP ${listRes.status}`);
-  }
-
-  const listJson = (await listRes.json()) as CordobaListaResponse;
-  const items = listJson.data?.items ?? [];
-  const tipos = TURNO_TO_CORDOBA_TIPO[turno];
-  const match = items.find((item) =>
-    tipos.includes(item.tipo_juego.trim().toLowerCase())
-  );
-
-  if (!match) {
+  if (detailRes.status === 404) {
     for (const lot of loterias) {
       result[lot] = {
         publicado: false,
@@ -85,21 +70,15 @@ export async function fetchLoteriaSetFromCordobaApi(
     return result;
   }
 
-  const detailRes = await fetch(
-    `${CORDOBA_API_BASE}?numeroSorteo=${match.sorteo}`,
-    {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-      signal: AbortSignal.timeout(12000),
-    }
-  );
-
   if (!detailRes.ok) {
     throw new Error(`Córdoba API detalle HTTP ${detailRes.status}`);
   }
 
   const detailJson = (await detailRes.json()) as CordobaDetalleResponse;
   const bloques = detailJson.data?.resultado ?? [];
+  const numeroSorteo = detailJson.data?.sorteo
+    ? String(detailJson.data.sorteo)
+    : null;
 
   for (const loteria of loterias) {
     const matcher = CORDOBA_LOTERIA_MATCHERS[loteria];
@@ -123,16 +102,15 @@ export async function fetchLoteriaSetFromCordobaApi(
             publicado: true,
             cabeza: numeros[0],
             premios: numeros,
-            numeroSorteo: String(match.sorteo),
+            numeroSorteo,
           }
         : {
             publicado: false,
             cabeza: null,
             premios: [],
-            numeroSorteo: String(match.sorteo),
+            numeroSorteo,
           };
   }
 
   return result;
 }
-

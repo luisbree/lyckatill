@@ -7,6 +7,7 @@ import type {
   SorteoDocument,
   TurnoId,
 } from "./schema";
+import type { SorteoResumen } from "./stats";
 
 export const SORTEOS_COLLECTION = "sorteos";
 export const RECOLECCIONES_COLLECTION = "recolecciones";
@@ -121,6 +122,19 @@ export async function getSorteosPendientes(
 
   const snapshot = await query.get();
   return snapshot.docs.map((doc) => doc.data() as SorteoDocument);
+}
+
+/**
+ * Obtiene todos los sorteos publicados (solo campos necesarios para estadísticas).
+ */
+export async function getAllSorteosPublicados(): Promise<SorteoResumen[]> {
+  const snapshot = await adminDb
+    .collection(SORTEOS_COLLECTION)
+    .where("estado", "==", "publicado")
+    .select("fecha", "loteria", "turno", "cabeza", "estado")
+    .get();
+
+  return snapshot.docs.map((doc) => doc.data() as SorteoResumen);
 }
 
 /**
