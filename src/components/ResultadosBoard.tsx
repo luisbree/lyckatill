@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LOTERIAS_CONFIG, TURNOS_CONFIG } from "@/lib/quiniela/config";
 import type { AtrasosPorLoteria } from "@/lib/quiniela/stats";
 import {
@@ -10,7 +10,9 @@ import {
   type SorteoDocument,
   type TurnoId,
 } from "@/lib/quiniela/types";
+import { getSeasonFromFecha, SEASON_THEMES } from "@/lib/theme/season";
 import { AtrasosDetalle } from "./AtrasosDetalle";
+import { SimuladorJugadas } from "./SimuladorJugadas";
 
 export function ResultadosBoard() {
   const [fecha, setFecha] = useState<string>("");
@@ -19,36 +21,12 @@ export function ResultadosBoard() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SorteoDocument | null>(null);
-  const [collectingTurno, setCollectingTurno] = useState<TurnoId | null>(null);
+  const [collectingTarget, setCollectingTarget] = useState<
+    "all" | TurnoId | null
+  >(null);
   const [collectMsg, setCollectMsg] = useState<string | null>(null);
 
   const [refreshTick, setRefreshTick] = useState<number>(0);
-
-  const loadSorteos = useCallback(async (targetFecha: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const qs = targetFecha ? `?fecha=${targetFecha}` : "";
-      const res = await fetch(`/api/sorteos${qs}`, {
-        cache: "no-store",
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "No se pudieron cargar los resultados");
-      }
-      if (!targetFecha && typeof data.fecha === "string") {
-        setFecha(data.fecha);
-      }
-      setSorteos(Array.isArray(data.sorteos) ? data.sorteos : []);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Error al consultar resultados"
-      );
-      setSorteos([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,37 +88,76 @@ export function ResultadosBoard() {
     return map;
   }, [sorteos]);
 
-  async function handleCollectTurno(turno: TurnoId) {
-    setCollectingTurno(turno);
+  async function handleCollect(turno?: TurnoId) {
+    setCollectingTarget(turno ?? "all");
     setCollectMsg(null);
     try {
-      const res = await fetch("/api/cron/collect", {
+      const res = await fetch("/api/collect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ turno, fecha }),
+        body: JSON.stringify({
+          ...(turno ? { turno } : {}),
+          ...(fecha ? { fecha } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
         throw new Error(data.error || "Error al ejecutar recolección");
       }
-      const { publicados, pendientes, errores } = data.log;
-      setCollectMsg(
-        `${TURNOS_CONFIG[turno].nombre}: ${publicados} publicados, ${pendientes} pendientes, ${errores} errores.`
+
+      const logs = Array.isArray(data.logs) ? data.logs : [];
+      const totales = logs.reduce(
+        (acc: { pub: number; pend: number; err: number }, l: { publicados: number; pendientes: number; errores: number }) => ({
+          pub: acc.pub + l.publicados,
+          pend: acc.pend + l.pendientes,
+          err: acc.err + l.errores,
+        }),
+        { pub: 0, pend: 0, err: 0 }
       );
-      await loadSorteos(fecha);
+
+      const label = turno ? TURNOS_CONFIG[turno].nombre : "Día completo";
+      setCollectMsg(
+        `${label}: ${totales.pub} publicados, ${totales.pend} pendientes, ${totales.err} errores.`
+      );
+      setRefreshTick((t) => t + 1);
     } catch (err) {
       setCollectMsg(
         err instanceof Error ? err.message : "Error al recolectar"
       );
     } finally {
-      setCollectingTurno(null);
+      setCollectingTarget(null);
     }
   }
 
+  const theme = useMemo(
+    () => SEASON_THEMES[getSeasonFromFecha(fecha)],
+    [fecha]
+  );
+
   return (
-    <div className="space-y-6">
-      {/* Barra superior: selector de fecha y recarga */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4">
+    <div className={`min-h-screen w-full ${theme.pageBg} px-4 py-10 font-sans`}>
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+              Resultados de Quiniela
+            </h1>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Ciudad, Provincia, Córdoba, Santa Fe, Mendoza, Entre Ríos y Uruguay.
+            </p>
+          </div>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${theme.badge}`}
+          >
+            <span>{theme.emoji}</span>
+            <span>Edición {theme.label}</span>
+          </span>
+        </header>
+
+        {/* Barra superior: selector de fecha y recarga */}
+        <div
+          className={`flex flex-wrap items-center justify-between gap-4 rounded-xl border ${theme.cardBorder} bg-white/90 dark:bg-zinc-950/90 p-4 shadow-sm`}
+        >
         <div className="flex items-center gap-3">
           <label
             htmlFor="fecha-sorteos"
@@ -169,6 +186,16 @@ export function ResultadosBoard() {
           >
             {loading ? "Cargando..." : "Actualizar"}
           </button>
+          <button
+            type="button"
+            onClick={() => void handleCollect()}
+            disabled={collectingTarget !== null}
+            className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${theme.primaryButton}`}
+          >
+            {collectingTarget === "all"
+              ? "Recolectando..."
+              : "Recolectar día"}
+          </button>
         </div>
 
         <div className="text-xs text-zinc-500">
@@ -189,10 +216,14 @@ export function ResultadosBoard() {
       )}
 
       {/* Grilla principal: Turnos x Loterías */}
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+      <div
+        className={`overflow-x-auto rounded-xl border ${theme.cardBorder} bg-white/95 dark:bg-zinc-950/95 shadow-sm`}
+      >
         <table className="w-full border-collapse text-left text-sm">
           <thead>
-            <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60">
+            <tr
+              className={`border-b ${theme.cardBorder} ${theme.tableHeader}`}
+            >
               <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-200">
                 Turno
               </th>
@@ -261,7 +292,7 @@ export function ResultadosBoard() {
                           <button
                             type="button"
                             onClick={() => setSelected(doc)}
-                            className="inline-flex min-w-[68px] items-center justify-center rounded-lg bg-zinc-900 dark:bg-zinc-100 px-3 py-1.5 font-mono text-base font-bold tracking-wider text-white dark:text-zinc-900 transition-transform hover:scale-105"
+                            className={`inline-flex min-w-[68px] items-center justify-center rounded-lg px-3 py-1.5 font-mono text-base font-bold tracking-wider transition-transform hover:scale-105 ${theme.cabezaBadge}`}
                             title="Ver los 20 premios"
                           >
                             {doc.cabeza}
@@ -297,11 +328,11 @@ export function ResultadosBoard() {
                   <td className="px-3 py-3.5 text-right">
                     <button
                       type="button"
-                      onClick={() => void handleCollectTurno(turnoId)}
-                      disabled={collectingTurno !== null}
+                      onClick={() => void handleCollect(turnoId)}
+                      disabled={collectingTarget !== null}
                       className="rounded-lg border border-zinc-200 dark:border-zinc-800 px-2.5 py-1 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 disabled:opacity-40"
                     >
-                      {collectingTurno === turnoId ? "..." : "Recolectar"}
+                      {collectingTarget === turnoId ? "..." : "Recolectar"}
                     </button>
                   </td>
                 </tr>
@@ -309,13 +340,58 @@ export function ResultadosBoard() {
             })}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50/90 dark:bg-zinc-900/60">
-              <td className="px-4 py-3.5 align-middle">
-                <div className="font-semibold text-zinc-800 dark:text-zinc-200">
+            <tr className={theme.atrasadoRow}>
+              <td className="px-4 py-4 align-middle">
+                <div className="font-bold text-zinc-900 dark:text-zinc-100">
                   Más atrasados
                 </div>
-                <div className="text-[11px] text-zinc-400">
+                <div className="text-[11px] text-zinc-600 dark:text-zinc-400">
                   Centena · Decena · Unidad
+                </div>
+              </td>
+              {LOTERIA_IDS.map((loteriaId: LoteriaId) => {
+                const stat = atrasos?.[loteriaId];
+                if (!stat) {
+                  return (
+                    <td
+                      key={loteriaId}
+                      className="px-4 py-4 text-center text-xs text-zinc-400"
+                    >
+                      —
+                    </td>
+                  );
+                }
+
+                const codigo = `${stat.centena.digito}${stat.decena.digito}${stat.unidad.digito}`;
+                const title = `Base: ${stat.totalSorteos} sorteos · C:${stat.centena.digito} (${stat.centena.atraso}) · D:${stat.decena.digito} (${stat.decena.atraso}) · U:${stat.unidad.digito} (${stat.unidad.atraso})`;
+
+                return (
+                  <td key={loteriaId} className="px-3 py-3.5 text-center">
+                    <div
+                      title={title}
+                      className="inline-flex flex-col items-center gap-1"
+                    >
+                      <span
+                        className={`rounded-xl px-3.5 py-1.5 font-mono text-lg font-extrabold tracking-widest ${theme.atrasadoBadge}`}
+                      >
+                        {codigo}
+                      </span>
+                      <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
+                        {stat.totalSorteos} sort.
+                      </span>
+                    </div>
+                  </td>
+                );
+              })}
+              <td className="px-3 py-4" />
+            </tr>
+            <tr className={`border-t ${theme.cardBorder} bg-white/80 dark:bg-zinc-950/80`}>
+              <td className="px-4 py-3.5 align-middle">
+                <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  Candidatos
+                </div>
+                <div className="text-[11px] text-zinc-500">
+                  Modelo 35/30/20/15
                 </div>
               </td>
               {LOTERIA_IDS.map((loteriaId: LoteriaId) => {
@@ -331,22 +407,20 @@ export function ResultadosBoard() {
                   );
                 }
 
-                const codigo = `${stat.centena.digito}${stat.decena.digito}${stat.unidad.digito}`;
-                const title = `Base: ${stat.totalSorteos} sorteos · C:${stat.centena.digito} (${stat.centena.atraso}) · D:${stat.decena.digito} (${stat.decena.atraso}) · U:${stat.unidad.digito} (${stat.unidad.atraso})`;
+                const c = stat.candidatoCentena[0];
+                const d = stat.candidatoDecena[0];
+                const u = stat.candidatoUnidad[0];
+                const codigo = `${c?.digito ?? "0"}${d?.digito ?? "0"}${u?.digito ?? "0"}`;
+                const title = `Candidato C:${c?.digito} (${c?.score}) · D:${d?.digito} (${d?.score}) · U:${u?.digito} (${u?.score})`;
 
                 return (
                   <td key={loteriaId} className="px-3 py-3 text-center">
-                    <div
+                    <span
                       title={title}
-                      className="inline-flex flex-col items-center gap-0.5"
+                      className={`inline-flex rounded-xl px-3.5 py-1.5 font-mono text-lg font-extrabold tracking-widest ${theme.candidatoBadge}`}
                     >
-                      <span className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-zinc-900 dark:text-zinc-100">
-                        {codigo}
-                      </span>
-                      <span className="text-[10px] text-zinc-400">
-                        {stat.totalSorteos} sort.
-                      </span>
-                    </div>
+                      {codigo}
+                    </span>
                   </td>
                 );
               })}
@@ -356,7 +430,13 @@ export function ResultadosBoard() {
         </table>
       </div>
 
-      <AtrasosDetalle atrasos={atrasos} />
+      <SimuladorJugadas
+        atrasos={atrasos}
+        theme={theme}
+        refreshTick={refreshTick}
+      />
+
+      <AtrasosDetalle atrasos={atrasos} theme={theme} />
 
       {/* Modal con los 20 premios o detalle de error */}
       {selected && (
@@ -426,6 +506,7 @@ export function ResultadosBoard() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,11 @@
-import { LOTERIA_IDS, type LoteriaId, type SorteoDocument, type TurnoId } from "./types";
+import {
+  LOTERIA_IDS,
+  type LoteriaId,
+  type SorteoDocument,
+  type TurnoId,
+} from "./types";
 
-const TURNO_ORDER: Record<TurnoId, number> = {
+export const TURNO_ORDER: Record<TurnoId, number> = {
   previa: 1,
   primera: 2,
   matutina: 3,
@@ -23,6 +28,15 @@ export interface DigitoRetornoStats {
   desviacion: number | null;
 }
 
+export interface CandidatoDigito {
+  digito: string;
+  score: number; // 0..100
+  zAtraso: number;
+  markovProb: number; // 0..1
+  freqGlobal: number; // 0..1
+  freqReciente: number; // 0..1
+}
+
 export interface LoteriaAtrasos {
   totalSorteos: number;
   centena: DigitoAtraso;
@@ -31,6 +45,9 @@ export interface LoteriaAtrasos {
   rankingCentena: DigitoRetornoStats[];
   rankingDecena: DigitoRetornoStats[];
   rankingUnidad: DigitoRetornoStats[];
+  candidatoCentena: CandidatoDigito[];
+  candidatoDecena: CandidatoDigito[];
+  candidatoUnidad: CandidatoDigito[];
 }
 
 export type AtrasosPorLoteria = Record<LoteriaId, LoteriaAtrasos | null>;
@@ -77,11 +94,6 @@ function findMasAtrasado(digitosEnOrdenDesc: string[]): DigitoAtraso {
   };
 }
 
-/**
- * Calcula para los 10 dígitos (0-9) el promedio y desviación estándar
- * de sorteos que tarda cada dígito en volver a salir, ordenado de menor a mayor promedio.
- * Recibe `digitosEnOrdenAsc` (del más antiguo al más reciente).
- */
 function calcularRankingRetorno(
   digitosEnOrdenAsc: string[]
 ): DigitoRetornoStats[] {
@@ -152,10 +164,96 @@ function calcularRankingRetorno(
   return stats;
 }
 
+function minMaxNormalize(values: number[]): number[] {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (max === min) {
+    return values.map(() => 0.5);
+  }
+  return values.map((v) => (v - min) / (max - min));
+}
+
+/**
+ * Calcula el Índice Compuesto de Candidato (35% Z-score atraso, 30% Markov,
+ * 20% Frecuencia global, 15% Momentum últimos 30 sorteos).
+ */
+function calcularCandidatos(
+  digitosEnOrdenAsc: string[],
+  ranking: DigitoRetornoStats[]
+): CandidatoDigito[] {
+  const total = digitosEnOrdenAsc.length;
+  const ultimo = digitosEnOrdenAsc[total - 1];
+  const ventanaReciente = digitosEnOrdenAsc.slice(-30);
+
+  const rankingPorDigito = new Map(ranking.map((r) => [r.digito, r]));
+
+  // Transiciones desde `ultimo` (Markov orden 1 con suavizado de Laplace +1)
+  const transiciones = new Map<string, number>();
+  let totalTransiciones = 0;
+  for (let i = 0; i < total - 1; i++) {
+    if (digitosEnOrdenAsc[i] === ultimo) {
+      const next = digitosEnOrdenAsc[i + 1];
+      transiciones.set(next, (transiciones.get(next) ?? 0) + 1);
+      totalTransiciones++;
+    }
+  }
+
+  const rawZ: number[] = [];
+  const rawMarkov: number[] = [];
+  const rawFreqGlobal: number[] = [];
+  const rawFreqReciente: number[] = [];
+
+  for (let n = 0; n <= 9; n++) {
+    const d = String(n);
+    const stat = rankingPorDigito.get(d);
+    const z =
+      stat && stat.promedio !== null
+        ? (stat.atrasoActual - stat.promedio) / Math.max(stat.desviacion ?? 1, 1)
+        : 0;
+
+    const markov = ((transiciones.get(d) ?? 0) + 1) / (totalTransiciones + 10);
+    const freqGlobal = total > 0 ? (stat?.apariciones ?? 0) / total : 0.1;
+    const countReciente = ventanaReciente.filter((x) => x === d).length;
+    const freqReciente =
+      ventanaReciente.length > 0 ? countReciente / ventanaReciente.length : 0.1;
+
+    rawZ.push(z);
+    rawMarkov.push(markov);
+    rawFreqGlobal.push(freqGlobal);
+    rawFreqReciente.push(freqReciente);
+  }
+
+  const normZ = minMaxNormalize(rawZ);
+  const normMarkov = minMaxNormalize(rawMarkov);
+  const normFreq = minMaxNormalize(rawFreqGlobal);
+  const normMomentum = minMaxNormalize(rawFreqReciente);
+
+  const candidatos: CandidatoDigito[] = [];
+  for (let n = 0; n <= 9; n++) {
+    const score =
+      (0.35 * normZ[n] +
+        0.3 * normMarkov[n] +
+        0.2 * normFreq[n] +
+        0.15 * normMomentum[n]) *
+      100;
+
+    candidatos.push({
+      digito: String(n),
+      score: Number(score.toFixed(1)),
+      zAtraso: Number(rawZ[n].toFixed(2)),
+      markovProb: Number(rawMarkov[n].toFixed(3)),
+      freqGlobal: Number(rawFreqGlobal[n].toFixed(3)),
+      freqReciente: Number(rawFreqReciente[n].toFixed(3)),
+    });
+  }
+
+  candidatos.sort((a, b) => b.score - a.score);
+  return candidatos;
+}
+
 /**
  * Calcula, para cada lotería y sin discriminar por horario, el dígito decimal (0-9)
- * más atrasado y el ranking de tiempo promedio de retorno (± desviación estándar)
- * en centena, decena y unidad de la cabeza.
+ * más atrasado, el ranking de tiempo promedio de retorno y los candidatos ponderados.
  */
 export function calcularAtrasosPorLoteria(
   sorteos: SorteoResumen[]
@@ -204,14 +302,21 @@ export function calcularAtrasosPorLoteria(
     const decenasAsc = decenasDesc.slice().reverse();
     const unidadesAsc = unidadesDesc.slice().reverse();
 
+    const rankingCentena = calcularRankingRetorno(centenasAsc);
+    const rankingDecena = calcularRankingRetorno(decenasAsc);
+    const rankingUnidad = calcularRankingRetorno(unidadesAsc);
+
     resultado[loteriaId] = {
       totalSorteos: lista.length,
       centena: findMasAtrasado(centenasDesc),
       decena: findMasAtrasado(decenasDesc),
       unidad: findMasAtrasado(unidadesDesc),
-      rankingCentena: calcularRankingRetorno(centenasAsc),
-      rankingDecena: calcularRankingRetorno(decenasAsc),
-      rankingUnidad: calcularRankingRetorno(unidadesAsc),
+      rankingCentena,
+      rankingDecena,
+      rankingUnidad,
+      candidatoCentena: calcularCandidatos(centenasAsc, rankingCentena),
+      candidatoDecena: calcularCandidatos(decenasAsc, rankingDecena),
+      candidatoUnidad: calcularCandidatos(unidadesAsc, rankingUnidad),
     };
   }
 

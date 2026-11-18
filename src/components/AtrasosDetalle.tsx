@@ -4,33 +4,72 @@ import { useState } from "react";
 import { LOTERIAS_CONFIG } from "@/lib/quiniela/config";
 import type {
   AtrasosPorLoteria,
+  CandidatoDigito,
   DigitoAtraso,
   DigitoRetornoStats,
 } from "@/lib/quiniela/stats";
 import { LOTERIA_IDS, type LoteriaId } from "@/lib/quiniela/types";
+import type { SeasonTheme } from "@/lib/theme/season";
 
 interface AtrasosDetalleProps {
   atrasos: AtrasosPorLoteria | null;
+  theme: SeasonTheme;
 }
 
 function PosicionCard({
   titulo,
   masAtrasado,
   ranking,
+  candidatos,
+  theme,
 }: {
   titulo: string;
   masAtrasado: DigitoAtraso;
   ranking: DigitoRetornoStats[];
+  candidatos: CandidatoDigito[];
+  theme: SeasonTheme;
 }) {
+  const top3 = candidatos.slice(0, 3);
   return (
-    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 space-y-3">
+    <div
+      className={`rounded-xl border ${theme.cardBorder} bg-white/90 dark:bg-zinc-950/90 p-4 space-y-3 shadow-sm`}
+    >
       <div className="flex items-center justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-2.5">
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           {titulo}
         </h3>
-        <span className="rounded-full bg-zinc-900 dark:bg-zinc-100 px-2.5 py-0.5 font-mono text-xs font-semibold text-white dark:text-zinc-900">
+        <span
+          className={`rounded-full px-3 py-1 font-mono text-xs font-bold tracking-wide ${theme.atrasadoPill}`}
+        >
           Más atrasado: {masAtrasado.digito} ({masAtrasado.atraso})
         </span>
+      </div>
+
+      {/* Top 3 candidatos del modelo ponderado */}
+      <div className="rounded-lg bg-zinc-50 dark:bg-zinc-900/70 p-2.5 space-y-1.5">
+        <div className="text-[11px] font-medium text-zinc-500">
+          Candidatos (35% atraso · 30% Markov · 20% freq · 15% rec.)
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {top3.map((c, idx) => (
+            <span
+              key={c.digito}
+              title={`Score: ${c.score} · z=${c.zAtraso} · Markov=${(
+                c.markovProb * 100
+              ).toFixed(1)}% · Freq=${(c.freqGlobal * 100).toFixed(
+                1
+              )}% · Rec=${(c.freqReciente * 100).toFixed(1)}%`}
+              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-xs ${
+                idx === 0
+                  ? `${theme.candidatoBadge} font-bold`
+                  : "border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-700 dark:text-zinc-300"
+              }`}
+            >
+              <span>{c.digito}</span>
+              <span className="text-[10px] opacity-80">{c.score}</span>
+            </span>
+          ))}
+        </div>
       </div>
 
       <ol className="divide-y divide-zinc-100 dark:divide-zinc-900 text-xs">
@@ -39,10 +78,8 @@ function PosicionCard({
           return (
             <li
               key={item.digito}
-              className={`flex items-center justify-between py-1.5 px-1.5 rounded ${
-                esMasAtrasado
-                  ? "bg-amber-50 dark:bg-amber-950/40 font-medium"
-                  : ""
+              className={`flex items-center justify-between py-1.5 px-2 rounded-lg transition-colors ${
+                esMasAtrasado ? `${theme.atrasadoCardHighlight} font-semibold my-0.5` : ""
               }`}
             >
               <div className="flex items-center gap-2.5">
@@ -79,7 +116,7 @@ function PosicionCard({
   );
 }
 
-export function AtrasosDetalle({ atrasos }: AtrasosDetalleProps) {
+export function AtrasosDetalle({ atrasos, theme }: AtrasosDetalleProps) {
   const [selectedLoteria, setSelectedLoteria] = useState<LoteriaId>("ciudad");
 
   if (!atrasos) return null;
@@ -109,8 +146,8 @@ export function AtrasosDetalle({ atrasos }: AtrasosDetalleProps) {
                 onClick={() => setSelectedLoteria(loteriaId)}
                 className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                   active
-                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                    : "border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                    ? theme.primaryButton
+                    : "border border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
                 }`}
               >
                 {LOTERIAS_CONFIG[loteriaId].nombre}
@@ -131,16 +168,22 @@ export function AtrasosDetalle({ atrasos }: AtrasosDetalleProps) {
             titulo="Centena"
             masAtrasado={stat.centena}
             ranking={stat.rankingCentena}
+            candidatos={stat.candidatoCentena}
+            theme={theme}
           />
           <PosicionCard
             titulo="Decena"
             masAtrasado={stat.decena}
             ranking={stat.rankingDecena}
+            candidatos={stat.candidatoDecena}
+            theme={theme}
           />
           <PosicionCard
             titulo="Unidad"
             masAtrasado={stat.unidad}
             ranking={stat.rankingUnidad}
+            candidatos={stat.candidatoUnidad}
+            theme={theme}
           />
         </div>
       )}
