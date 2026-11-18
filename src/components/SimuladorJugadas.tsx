@@ -14,6 +14,7 @@ import type {
 import type { AtrasosPorLoteria } from "@/lib/quiniela/stats";
 import { TURNO_IDS, type TurnoId } from "@/lib/quiniela/types";
 import type { SeasonTheme } from "@/lib/theme/season";
+import { SimuladorBalancePanel } from "./SimuladorBalancePanel";
 
 interface SimuladorJugadasProps {
   atrasos: AtrasosPorLoteria | null;
@@ -263,6 +264,8 @@ export function SimuladorJugadas({
           </div>
         </div>
       </div>
+
+      <SimuladorBalancePanel simulaciones={simulaciones} theme={theme} />
 
       {/* Controles para lanzar jugadas simuladas */}
       <div
