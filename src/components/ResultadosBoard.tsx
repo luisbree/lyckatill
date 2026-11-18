@@ -136,7 +136,7 @@ export function ResultadosBoard() {
 
   return (
     <div className={`min-h-screen w-full ${theme.pageBg} px-4 py-10 font-sans`}>
-      <div className="mx-auto w-full max-w-6xl space-y-6">
+      <div className="mx-auto w-full max-w-6xl space-y-8">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
@@ -154,7 +154,23 @@ export function ResultadosBoard() {
           </span>
         </header>
 
-        {/* Barra superior: selector de fecha y recarga */}
+        <section
+          className={`rounded-2xl border-2 ${theme.cardBorder} bg-white/75 dark:bg-zinc-950/75 p-5 sm:p-6 shadow-md space-y-5`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200/70 dark:border-zinc-800 pb-3">
+            <div>
+              <span
+                className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider mb-1 ${theme.badge}`}
+              >
+                Sección 1
+              </span>
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                Pizarra de sorteos
+              </h2>
+            </div>
+          </div>
+
+          {/* Barra superior: selector de fecha y recarga */}
         <div
           className={`flex flex-wrap items-center justify-between gap-4 rounded-xl border ${theme.cardBorder} bg-white/90 dark:bg-zinc-950/90 p-4 shadow-sm`}
         >
@@ -429,6 +445,7 @@ export function ResultadosBoard() {
           </tfoot>
         </table>
       </div>
+        </section>
 
       <SimuladorJugadas
         atrasos={atrasos}

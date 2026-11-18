@@ -14,6 +14,7 @@ export interface SimulacionDocument {
   numero: string; // 2 o 3 dígitos (D·U o C·D·U)
   cifras?: 2 | 3;
   estrategia?: EstrategiaSimulacion;
+  archivada?: boolean;
   apuestaPorSorteo: number;
   multiplicadorPremio: number;
   fechaInicio: string; // YYYY-MM-DD
@@ -27,6 +28,7 @@ export interface SimulacionEvaluada extends SimulacionDocument {
   gastoTotal: number;
   gananciaBruta: number;
   balance: number;
+  numeroSorteado: string | null;
   acierto: {
     fecha: string;
     turno: TurnoId;
@@ -101,6 +103,46 @@ export async function deleteAllSimulaciones(): Promise<void> {
 }
 
 /**
+ * Deshace las jugadas pendientes ("activa", aún no sorteadas) eliminándolas
+ * para revertir su gasto, y archiva las jugadas ya sorteadas para conservar
+ * sus ganancias/pérdidas en el balance acumulado.
+ */
+export async function limpiarListaSimulaciones(
+  sorteosPublicados: SorteoResumen[]
+): Promise<{ eliminadas: number; archivadas: number }> {
+  const sims = await listSimulaciones();
+  if (sims.length === 0) return { eliminadas: 0, archivadas: 0 };
+
+  const { simulaciones: evaluadas } = evaluarSimulaciones(
+    sims,
+    sorteosPublicados
+  );
+
+  const batch = adminDb.batch();
+  let eliminadas = 0;
+  let archivadas = 0;
+
+  for (const sim of evaluadas) {
+    if (sim.archivada) continue;
+    const ref = adminDb.collection(SIMULACIONES_COLLECTION).doc(sim.id);
+
+    if (sim.estado === "activa") {
+      batch.delete(ref);
+      eliminadas++;
+    } else {
+      batch.update(ref, { archivada: true });
+      archivadas++;
+    }
+  }
+
+  if (eliminadas > 0 || archivadas > 0) {
+    await batch.commit();
+  }
+
+  return { eliminadas, archivadas };
+}
+
+/**
  * Evalúa cada jugada simulada para su turno puntual (fechaInicio + turnoInicio).
  * El gasto se computa desde el momento en que se carga la jugada.
  */
@@ -165,6 +207,7 @@ export function evaluarSimulaciones(
       gastoTotal,
       gananciaBruta,
       balance,
+      numeroSorteado: sorteo?.cabeza ?? null,
       acierto,
     };
   });

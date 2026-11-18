@@ -118,75 +118,99 @@ function PosicionCard({
 
 export function AtrasosDetalle({ atrasos, theme }: AtrasosDetalleProps) {
   const [selectedLoteria, setSelectedLoteria] = useState<LoteriaId>("ciudad");
+  const [open, setOpen] = useState<boolean>(true);
 
   if (!atrasos) return null;
 
   const stat = atrasos[selectedLoteria];
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-            Tiempo promedio de retorno por dígito
+    <section
+      className={`rounded-2xl border-2 ${theme.cardBorder} bg-white/75 dark:bg-zinc-950/75 p-5 sm:p-6 shadow-md space-y-5`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200/70 dark:border-zinc-800 pb-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="text-left group"
+        >
+          <span
+            className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider mb-1 ${theme.badge}`}
+          >
+            Sección 3
+          </span>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 group-hover:opacity-80">
+            {open ? "▾" : "▸"} Tiempo promedio de retorno por dígito
           </h2>
           <p className="text-xs text-zinc-500">
             Ordenado de menor a mayor promedio de sorteos entre apariciones (±
             desviación estándar).
           </p>
-        </div>
+        </button>
 
-        <div className="flex flex-wrap gap-1.5">
-          {LOTERIA_IDS.map((loteriaId) => {
-            const active = loteriaId === selectedLoteria;
-            return (
-              <button
-                key={loteriaId}
-                type="button"
-                onClick={() => setSelectedLoteria(loteriaId)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  active
-                    ? theme.primaryButton
-                    : "border border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                }`}
-              >
-                {LOTERIAS_CONFIG[loteriaId].nombre}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-2">
+          {open && (
+            <div className="flex flex-wrap gap-1.5">
+              {LOTERIA_IDS.map((loteriaId) => {
+                const active = loteriaId === selectedLoteria;
+                return (
+                  <button
+                    key={loteriaId}
+                    type="button"
+                    onClick={() => setSelectedLoteria(loteriaId)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                      active
+                        ? theme.primaryButton
+                        : "border border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                    }`}
+                  >
+                    {LOTERIAS_CONFIG[loteriaId].nombre}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950 px-2.5 py-1.5 text-[11px] font-medium text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+          >
+            {open ? "Ocultar" : "Mostrar"}
+          </button>
         </div>
       </div>
 
-      {!stat ? (
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 text-center text-sm text-zinc-500">
-          Todavía no hay sorteos publicados para{" "}
-          {LOTERIAS_CONFIG[selectedLoteria].nombre}.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <PosicionCard
-            titulo="Centena"
-            masAtrasado={stat.centena}
-            ranking={stat.rankingCentena}
-            candidatos={stat.candidatoCentena}
-            theme={theme}
-          />
-          <PosicionCard
-            titulo="Decena"
-            masAtrasado={stat.decena}
-            ranking={stat.rankingDecena}
-            candidatos={stat.candidatoDecena}
-            theme={theme}
-          />
-          <PosicionCard
-            titulo="Unidad"
-            masAtrasado={stat.unidad}
-            ranking={stat.rankingUnidad}
-            candidatos={stat.candidatoUnidad}
-            theme={theme}
-          />
-        </div>
-      )}
+      {open &&
+        (!stat ? (
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 text-center text-sm text-zinc-500">
+            Todavía no hay sorteos publicados para{" "}
+            {LOTERIAS_CONFIG[selectedLoteria].nombre}.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <PosicionCard
+              titulo="Centena"
+              masAtrasado={stat.centena}
+              ranking={stat.rankingCentena}
+              candidatos={stat.candidatoCentena}
+              theme={theme}
+            />
+            <PosicionCard
+              titulo="Decena"
+              masAtrasado={stat.decena}
+              ranking={stat.rankingDecena}
+              candidatos={stat.candidatoDecena}
+              theme={theme}
+            />
+            <PosicionCard
+              titulo="Unidad"
+              masAtrasado={stat.unidad}
+              ranking={stat.rankingUnidad}
+              candidatos={stat.candidatoUnidad}
+              theme={theme}
+            />
+          </div>
+        ))}
     </section>
   );
 }

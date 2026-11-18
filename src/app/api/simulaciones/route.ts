@@ -8,6 +8,7 @@ import {
   deleteSimulacion,
   evaluarSimulaciones,
   getFechaMananaRioplatense,
+  limpiarListaSimulaciones,
   listSimulaciones,
 } from "@/lib/quiniela/simulator";
 
@@ -23,7 +24,7 @@ const CreateSimulacionesSchema = z.object({
       })
     )
     .min(1),
-  apuestaPorSorteo: z.number().positive().max(1_000_000).default(100),
+  apuestaPorSorteo: z.number().positive().max(1_000_000).default(150),
   multiplicadorPremio: z.number().positive().max(10_000).default(600),
   fechaInicio: z
     .string()
@@ -88,6 +89,18 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Error al crear simulaciones";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function PATCH() {
+  try {
+    const sorteos = await getAllSorteosPublicados();
+    const result = await limpiarListaSimulaciones(sorteos);
+    return NextResponse.json({ ok: true, ...result });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Error al limpiar jugadas";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

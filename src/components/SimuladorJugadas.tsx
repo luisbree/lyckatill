@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getLoteriasParaTurno,
   LOTERIAS_CONFIG,
@@ -30,6 +30,64 @@ function formatMoney(n: number): string {
   }).format(n);
 }
 
+/**
+ * Compara dígito a dígito desde la derecha (Unidad, Decena, Centena)
+ * y resalta en color las coincidencias posicionales exactas.
+ */
+function DigitosResaltados({
+  valor,
+  referencia,
+}: {
+  valor: string;
+  referencia: string | null;
+}) {
+  const chars = valor.split("");
+  return (
+    <span className="inline-flex items-center font-mono text-sm font-bold tracking-wider">
+      {chars.map((ch, idx) => {
+        const posDesdeDerecha = chars.length - 1 - idx;
+        const refIdx = referencia ? referencia.length - 1 - posDesdeDerecha : -1;
+        const coincide =
+          referencia !== null &&
+          refIdx >= 0 &&
+          posDesdeDerecha < 3 &&
+          referencia[refIdx] === ch;
+
+        return (
+          <span
+            key={idx}
+            className={
+              coincide
+                ? "rounded bg-emerald-500 px-0.5 text-white dark:bg-emerald-500 dark:text-zinc-950"
+                : ""
+            }
+          >
+            {ch}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+function getSiguienteTurno(
+  fecha: string,
+  turno: TurnoId
+): { fecha: string; turno: TurnoId } {
+  const idx = TURNO_IDS.indexOf(turno);
+  if (idx >= 0 && idx < TURNO_IDS.length - 1) {
+    return { fecha, turno: TURNO_IDS[idx + 1] };
+  }
+
+  // Después de Nocturna pasa a La Previa del próximo día hábil (saltando domingo)
+  const date = new Date(`${fecha}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  if (date.getUTCDay() === 0) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return { fecha: date.toISOString().slice(0, 10), turno: "previa" };
+}
+
 export function SimuladorJugadas({
   atrasos,
   theme,
@@ -45,16 +103,20 @@ export function SimuladorJugadas({
   });
   const [fechaInicio, setFechaInicio] = useState<string>("");
   const [turnoInicio, setTurnoInicio] = useState<TurnoId>("previa");
-  const [apuestaPorSorteo, setApuestaPorSorteo] = useState<number>(100);
+  const [apuestaPorSorteo, setApuestaPorSorteo] = useState<number>(150);
   const [multiplicador3C, setMultiplicador3C] = useState<number>(600);
   const [multiplicador2C, setMultiplicador2C] = useState<number>(70);
   const [usarCandidatos, setUsarCandidatos] = useState<boolean>(true);
-  const [usarAtrasados, setUsarAtrasados] = useState<boolean>(false);
+  const [usarAtrasados, setUsarAtrasados] = useState<boolean>(true);
   const [usar3Cifras, setUsar3Cifras] = useState<boolean>(true);
   const [usar2Cifras, setUsar2Cifras] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
   const [localTick, setLocalTick] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [openJugadas, setOpenJugadas] = useState<boolean>(true);
+  const [verTodasJugadas, setVerTodasJugadas] = useState<boolean>(false);
+  const fechaInicializadaRef = useRef<boolean>(false);
+  const ultimoBatchAvanzadoRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,12 +128,44 @@ export function SimuladorJugadas({
       })
       .then((data) => {
         if (cancelled) return;
-        setSimulaciones(
-          Array.isArray(data.simulaciones) ? data.simulaciones : []
-        );
+        const lista: SimulacionEvaluada[] = Array.isArray(data.simulaciones)
+          ? data.simulaciones
+          : [];
+        setSimulaciones(lista);
         if (data.resumen) setResumen(data.resumen);
-        if (!fechaInicio && typeof data.fechaMananaSugerida === "string") {
+
+        // Si el último lote ya fue sorteado y cotejado por completo, avanzar al siguiente turno
+        const ultimo = lista[0];
+        if (ultimo) {
+          const loteKey = `${ultimo.fechaInicio}_${ultimo.turnoInicio}`;
+          const lote = lista.filter(
+            (s) =>
+              s.fechaInicio === ultimo.fechaInicio &&
+              s.turnoInicio === ultimo.turnoInicio
+          );
+          const todoCotejado =
+            lote.length > 0 && lote.every((s) => s.estado !== "activa");
+
+          if (todoCotejado && ultimoBatchAvanzadoRef.current !== loteKey) {
+            const siguiente = getSiguienteTurno(
+              ultimo.fechaInicio,
+              ultimo.turnoInicio
+            );
+            setFechaInicio(siguiente.fecha);
+            setTurnoInicio(siguiente.turno);
+            fechaInicializadaRef.current = true;
+            ultimoBatchAvanzadoRef.current = loteKey;
+          } else if (!fechaInicializadaRef.current) {
+            setFechaInicio(ultimo.fechaInicio);
+            setTurnoInicio(ultimo.turnoInicio);
+            fechaInicializadaRef.current = true;
+          }
+        } else if (
+          !fechaInicializadaRef.current &&
+          typeof data.fechaMananaSugerida === "string"
+        ) {
           setFechaInicio(data.fechaMananaSugerida);
+          fechaInicializadaRef.current = true;
         }
         setError(null);
       })
@@ -86,7 +180,7 @@ export function SimuladorJugadas({
     return () => {
       cancelled = true;
     };
-  }, [refreshTick, localTick, fechaInicio]);
+  }, [refreshTick, localTick]);
 
   const dayOfWeek = fechaInicio
     ? new Date(`${fechaInicio}T12:00:00-03:00`).getUTCDay()
@@ -186,12 +280,27 @@ export function SimuladorJugadas({
     }
   }
 
-  async function handleDelete(id?: string) {
+  async function handleLimpiarLista() {
     setBusy(true);
     setError(null);
     try {
-      const qs = id ? `?id=${encodeURIComponent(id)}` : "?all=true";
-      const res = await fetch(`/api/simulaciones${qs}`, { method: "DELETE" });
+      const res = await fetch("/api/simulaciones", { method: "PATCH" });
+      if (!res.ok) throw new Error("No se pudo limpiar la lista");
+      setLocalTick((t) => t + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al limpiar lista");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/simulaciones?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
       if (!res.ok) throw new Error("No se pudo eliminar");
       setLocalTick((t) => t + 1);
     } catch (err) {
@@ -209,11 +318,36 @@ export function SimuladorJugadas({
     ((usarCandidatos ? 1 : 0) + (usarAtrasados ? 1 : 0)) *
     ((usar3Cifras ? 1 : 0) + (usar2Cifras ? 1 : 0));
 
+  const simulacionesActivasLista = simulaciones.filter((s) => !s.archivada);
+  const ultimoTurnoJugado = simulacionesActivasLista[0]
+    ? {
+        fecha: simulacionesActivasLista[0].fechaInicio,
+        turno: simulacionesActivasLista[0].turnoInicio,
+      }
+    : null;
+
+  const simulacionesVisibles = verTodasJugadas
+    ? simulaciones
+    : ultimoTurnoJugado
+      ? simulacionesActivasLista.filter(
+          (s) =>
+            s.fechaInicio === ultimoTurnoJugado.fecha &&
+            s.turnoInicio === ultimoTurnoJugado.turno
+        )
+      : [];
+
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <section
+      className={`rounded-2xl border-2 ${theme.cardBorder} bg-white/75 dark:bg-zinc-950/75 p-5 sm:p-6 shadow-md space-y-5`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200/70 dark:border-zinc-800 pb-3">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+          <span
+            className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider mb-1 ${theme.badge}`}
+          >
+            Sección 2
+          </span>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Simulador de jugadas
           </h2>
           <p className="text-xs text-zinc-500">
@@ -223,49 +357,11 @@ export function SimuladorJugadas({
         </div>
       </div>
 
-      {/* Tarjetas de balance */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div
-          className={`rounded-xl border ${theme.cardBorder} bg-white/90 dark:bg-zinc-950/90 p-3.5`}
-        >
-          <div className="text-[11px] text-zinc-500">Gastos (apostado)</div>
-          <div className="mt-1 font-mono text-lg font-bold text-zinc-900 dark:text-zinc-100">
-            {formatMoney(resumen.totalApostado)}
-          </div>
-        </div>
-        <div
-          className={`rounded-xl border ${theme.cardBorder} bg-white/90 dark:bg-zinc-950/90 p-3.5`}
-        >
-          <div className="text-[11px] text-zinc-500">Ganancias</div>
-          <div className="mt-1 font-mono text-lg font-bold text-emerald-700 dark:text-emerald-400">
-            {formatMoney(resumen.totalGanado)}
-          </div>
-        </div>
-        <div
-          className={`rounded-xl border ${theme.cardBorder} bg-white/90 dark:bg-zinc-950/90 p-3.5`}
-        >
-          <div className="text-[11px] text-zinc-500">Balance neto</div>
-          <div
-            className={`mt-1 font-mono text-lg font-bold ${
-              resumen.balanceNeto >= 0
-                ? "text-emerald-700 dark:text-emerald-400"
-                : "text-rose-600 dark:text-rose-400"
-            }`}
-          >
-            {formatMoney(resumen.balanceNeto)}
-          </div>
-        </div>
-        <div
-          className={`rounded-xl border ${theme.cardBorder} bg-white/90 dark:bg-zinc-950/90 p-3.5`}
-        >
-          <div className="text-[11px] text-zinc-500">Estado</div>
-          <div className="mt-1 text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-            {resumen.activas} activas · {resumen.acertadas} acertadas
-          </div>
-        </div>
-      </div>
-
-      <SimuladorBalancePanel simulaciones={simulaciones} theme={theme} />
+      <SimuladorBalancePanel
+        simulaciones={simulaciones}
+        resumen={resumen}
+        theme={theme}
+      />
 
       {/* Controles para lanzar jugadas simuladas */}
       <div
@@ -317,10 +413,12 @@ export function SimuladorJugadas({
             <input
               id="sim-apuesta"
               type="number"
-              min={1}
+              min={150}
               value={apuestaPorSorteo}
               onChange={(e) =>
-                setApuestaPorSorteo(Math.max(1, Number(e.target.value) || 1))
+                setApuestaPorSorteo(
+                  Math.max(150, Number(e.target.value) || 150)
+                )
               }
               className="w-28 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-zinc-900 dark:text-zinc-100"
             />
@@ -421,11 +519,12 @@ export function SimuladorJugadas({
                 ? "Guardando..."
                 : `Simular (${totalJugadasPreview} jugadas)`}
             </button>
-            {simulaciones.length > 0 && (
+            {simulacionesActivasLista.length > 0 && (
               <button
                 type="button"
-                onClick={() => void handleDelete()}
+                onClick={() => void handleLimpiarLista()}
                 disabled={busy}
+                title="Oculta las jugadas actuales de la lista sin borrar el balance acumulado"
                 className="rounded-lg border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 disabled:opacity-50"
               >
                 Limpiar todo
@@ -441,16 +540,59 @@ export function SimuladorJugadas({
         </div>
       )}
 
-      {simulaciones.length > 0 && (
+      {(simulacionesVisibles.length > 0 || simulaciones.length > 0) && (
         <div
           className={`overflow-x-auto rounded-xl border ${theme.cardBorder} bg-white/95 dark:bg-zinc-950/95`}
         >
-          <table className="w-full border-collapse text-left text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5">
+            <button
+              type="button"
+              onClick={() => setOpenJugadas((v) => !v)}
+              className="flex items-center gap-2 text-left text-xs font-semibold text-zinc-800 dark:text-zinc-200 hover:text-zinc-950 dark:hover:text-zinc-50"
+            >
+              <span>
+                {openJugadas ? "▾" : "▸"} Apuestas{" "}
+                {verTodasJugadas || !ultimoTurnoJugado
+                  ? `(${simulaciones.length})`
+                  : `(${ultimoTurnoJugado.fecha} · ${
+                      TURNOS_CONFIG[ultimoTurnoJugado.turno].nombre
+                    } · ${simulacionesVisibles.length})`}
+              </span>
+            </button>
+
+            <div className="flex items-center gap-3">
+              {simulaciones.length > simulacionesVisibles.length ||
+              verTodasJugadas ? (
+                <button
+                  type="button"
+                  onClick={() => setVerTodasJugadas((v) => !v)}
+                  className="text-[11px] font-medium text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-200"
+                >
+                  {verTodasJugadas
+                    ? "Solo última jugada"
+                    : `Ver historial (${simulaciones.length})`}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setOpenJugadas((v) => !v)}
+                className="text-[11px] text-zinc-400"
+              >
+                {openJugadas ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
+          </div>
+
+          {openJugadas && (
+          <table className="w-full border-collapse border-t border-zinc-100 dark:border-zinc-800 text-left text-xs">
             <thead>
               <tr className={`border-b ${theme.cardBorder} ${theme.tableHeader}`}>
                 <th className="px-3 py-2.5 font-semibold">Lotería</th>
                 <th className="px-3 py-2.5 font-semibold text-center">
-                  Número
+                  Apostado
+                </th>
+                <th className="px-3 py-2.5 font-semibold text-center">
+                  Salió
                 </th>
                 <th className="px-3 py-2.5 font-semibold">Fecha · Turno</th>
                 <th className="px-3 py-2.5 font-semibold text-right">
@@ -468,15 +610,18 @@ export function SimuladorJugadas({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
-              {simulaciones.map((sim) => (
+              {simulacionesVisibles.map((sim) => (
                 <tr key={sim.id}>
                   <td className="px-3 py-2.5 font-medium text-zinc-900 dark:text-zinc-100">
                     {LOTERIAS_CONFIG[sim.loteria].nombre}
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="rounded-md border border-zinc-300 dark:border-zinc-700 px-2 py-0.5 font-mono text-sm font-bold tracking-wider">
-                        {sim.numero}
+                      <span className="rounded-md border border-zinc-300 dark:border-zinc-700 px-2 py-0.5">
+                        <DigitosResaltados
+                          valor={sim.numero}
+                          referencia={sim.numeroSorteado}
+                        />
                       </span>
                       <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-300">
                         {sim.cifras ?? sim.numero.length}C · {sim.multiplicadorPremio}x
@@ -491,6 +636,18 @@ export function SimuladorJugadas({
                         {sim.estrategia === "atrasados" ? "Atrasado" : "Candidato"}
                       </span>
                     </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    {sim.numeroSorteado ? (
+                      <span className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-2 py-0.5">
+                        <DigitosResaltados
+                          valor={sim.numeroSorteado}
+                          referencia={sim.numero}
+                        />
+                      </span>
+                    ) : (
+                      <span className="text-zinc-300 dark:text-zinc-700">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-zinc-500">
                     {sim.fechaInicio} · {TURNOS_CONFIG[sim.turnoInicio].nombre}
@@ -543,6 +700,7 @@ export function SimuladorJugadas({
               ))}
             </tbody>
           </table>
+          )}
         </div>
       )}
     </section>
