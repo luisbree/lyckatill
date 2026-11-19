@@ -7,6 +7,7 @@ import type {
   CandidatoDigito,
   DigitoAtraso,
   DigitoRetornoStats,
+  EcoDigito,
 } from "@/lib/quiniela/stats";
 import { LOTERIA_IDS, type LoteriaId } from "@/lib/quiniela/types";
 import type { SeasonTheme } from "@/lib/theme/season";
@@ -21,15 +22,18 @@ function PosicionCard({
   masAtrasado,
   ranking,
   candidatos,
+  ecos,
   theme,
 }: {
   titulo: string;
   masAtrasado: DigitoAtraso;
   ranking: DigitoRetornoStats[];
   candidatos: CandidatoDigito[];
+  ecos: EcoDigito[];
   theme: SeasonTheme;
 }) {
   const top3 = candidatos.slice(0, 3);
+  const top3Eco = ecos.slice(0, 3);
   return (
     <div
       className={`rounded-xl border ${theme.cardBorder} bg-white/90 dark:bg-zinc-950/90 p-4 space-y-3 shadow-sm`}
@@ -62,6 +66,33 @@ function PosicionCard({
               className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-xs ${
                 idx === 0
                   ? `${theme.candidatoBadge} font-bold`
+                  : "border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-700 dark:text-zinc-300"
+              }`}
+            >
+              <span>{c.digito}</span>
+              <span className="text-[10px] opacity-80">{c.score}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Top 3 Eco & Equilibrio */}
+      <div className="rounded-lg bg-zinc-50 dark:bg-zinc-900/70 p-2.5 space-y-1.5">
+        <div className="text-[11px] font-medium text-zinc-500">
+          Eco &amp; Equilibrio (35% M2 · 30% déf50 · 20% par · 15% modal)
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {top3Eco.map((c, idx) => (
+            <span
+              key={c.digito}
+              title={`Score: ${c.score} · M2=${(c.markov2Prob * 100).toFixed(
+                1
+              )}% · Déf50=${c.deficit50} · Par/R=${(
+                c.paridadRangoProb * 100
+              ).toFixed(1)}% · Modal=${(c.ecoModalProb * 100).toFixed(1)}%`}
+              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-xs ${
+                idx === 0
+                  ? `${theme.ecoBadge} font-bold`
                   : "border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-700 dark:text-zinc-300"
               }`}
             >
@@ -193,6 +224,7 @@ export function AtrasosDetalle({ atrasos, theme }: AtrasosDetalleProps) {
               masAtrasado={stat.centena}
               ranking={stat.rankingCentena}
               candidatos={stat.candidatoCentena}
+              ecos={stat.ecoCentena}
               theme={theme}
             />
             <PosicionCard
@@ -200,6 +232,7 @@ export function AtrasosDetalle({ atrasos, theme }: AtrasosDetalleProps) {
               masAtrasado={stat.decena}
               ranking={stat.rankingDecena}
               candidatos={stat.candidatoDecena}
+              ecos={stat.ecoDecena}
               theme={theme}
             />
             <PosicionCard
@@ -207,6 +240,7 @@ export function AtrasosDetalle({ atrasos, theme }: AtrasosDetalleProps) {
               masAtrasado={stat.unidad}
               ranking={stat.rankingUnidad}
               candidatos={stat.candidatoUnidad}
+              ecos={stat.ecoUnidad}
               theme={theme}
             />
           </div>

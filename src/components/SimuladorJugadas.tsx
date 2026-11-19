@@ -108,6 +108,7 @@ export function SimuladorJugadas({
   const [multiplicador2C, setMultiplicador2C] = useState<number>(70);
   const [usarCandidatos, setUsarCandidatos] = useState<boolean>(true);
   const [usarAtrasados, setUsarAtrasados] = useState<boolean>(true);
+  const [usarEco, setUsarEco] = useState<boolean>(true);
   const [usar3Cifras, setUsar3Cifras] = useState<boolean>(true);
   const [usar2Cifras, setUsar2Cifras] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
@@ -115,6 +116,7 @@ export function SimuladorJugadas({
   const [error, setError] = useState<string | null>(null);
   const [openJugadas, setOpenJugadas] = useState<boolean>(true);
   const [verTodasJugadas, setVerTodasJugadas] = useState<boolean>(false);
+  const [historialPageIdx, setHistorialPageIdx] = useState<number>(0);
   const fechaInicializadaRef = useRef<boolean>(false);
   const ultimoBatchAvanzadoRef = useRef<string | null>(null);
 
@@ -189,7 +191,7 @@ export function SimuladorJugadas({
 
   async function handleCrearSimulacion() {
     if (!atrasos) return;
-    if (!usarCandidatos && !usarAtrasados) return;
+    if (!usarCandidatos && !usarAtrasados && !usarEco) return;
     if (!usar3Cifras && !usar2Cifras) return;
 
     const jugadas = loteriasDelTurno.flatMap((loteriaCfg) => {
@@ -227,6 +229,15 @@ export function SimuladorJugadas({
           c: stat.centena.digito,
           d: stat.decena.digito,
           u: stat.unidad.digito,
+        });
+      }
+
+      if (usarEco) {
+        sets.push({
+          estrategia: "eco",
+          c: stat.ecoCentena[0]?.digito ?? "0",
+          d: stat.ecoDecena[0]?.digito ?? "0",
+          u: stat.ecoUnidad[0]?.digito ?? "0",
         });
       }
 
@@ -315,7 +326,7 @@ export function SimuladorJugadas({
     : 0;
   const totalJugadasPreview =
     cantidadLoteriasDisponibles *
-    ((usarCandidatos ? 1 : 0) + (usarAtrasados ? 1 : 0)) *
+    ((usarCandidatos ? 1 : 0) + (usarAtrasados ? 1 : 0) + (usarEco ? 1 : 0)) *
     ((usar3Cifras ? 1 : 0) + (usar2Cifras ? 1 : 0));
 
   const simulacionesActivasLista = simulaciones.filter((s) => !s.archivada);
@@ -326,8 +337,38 @@ export function SimuladorJugadas({
       }
     : null;
 
+  // Agrupamos todo el historial por jugada (fechaInicio + turnoInicio) para paginar
+  const paginasHistorial: Array<{
+    key: string;
+    fecha: string;
+    turno: TurnoId;
+    items: SimulacionEvaluada[];
+  }> = [];
+  const paginaMap = new Map<string, number>();
+  for (const s of simulaciones) {
+    const key = `${s.fechaInicio}_${s.turnoInicio}`;
+    const idx = paginaMap.get(key);
+    if (idx === undefined) {
+      paginaMap.set(key, paginasHistorial.length);
+      paginasHistorial.push({
+        key,
+        fecha: s.fechaInicio,
+        turno: s.turnoInicio,
+        items: [s],
+      });
+    } else {
+      paginasHistorial[idx].items.push(s);
+    }
+  }
+
+  const safePageIdx =
+    paginasHistorial.length > 0
+      ? Math.min(historialPageIdx, paginasHistorial.length - 1)
+      : 0;
+  const paginaHistorialActual = paginasHistorial[safePageIdx] ?? null;
+
   const simulacionesVisibles = verTodasJugadas
-    ? simulaciones
+    ? (paginaHistorialActual?.items ?? [])
     : ultimoTurnoJugado
       ? simulacionesActivasLista.filter(
           (s) =>
@@ -483,6 +524,15 @@ export function SimuladorJugadas({
                 />
                 <span>Más atrasados</span>
               </label>
+              <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={usarEco}
+                  onChange={(e) => setUsarEco(e.target.checked)}
+                  className="rounded border-zinc-300"
+                />
+                <span>Eco &amp; Equilibrio</span>
+              </label>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -552,25 +602,33 @@ export function SimuladorJugadas({
             >
               <span>
                 {openJugadas ? "▾" : "▸"} Apuestas{" "}
-                {verTodasJugadas || !ultimoTurnoJugado
-                  ? `(${simulaciones.length})`
-                  : `(${ultimoTurnoJugado.fecha} · ${
-                      TURNOS_CONFIG[ultimoTurnoJugado.turno].nombre
-                    } · ${simulacionesVisibles.length})`}
+                {verTodasJugadas && paginaHistorialActual
+                  ? `(${paginaHistorialActual.fecha} · ${
+                      TURNOS_CONFIG[paginaHistorialActual.turno].nombre
+                    } · ${paginaHistorialActual.items.length})`
+                  : ultimoTurnoJugado
+                    ? `(${ultimoTurnoJugado.fecha} · ${
+                        TURNOS_CONFIG[ultimoTurnoJugado.turno].nombre
+                      } · ${simulacionesVisibles.length})`
+                    : "(0)"}
               </span>
             </button>
 
             <div className="flex items-center gap-3">
-              {simulaciones.length > simulacionesVisibles.length ||
+              {paginasHistorial.length > 1 ||
+              (simulaciones.length > simulacionesVisibles.length) ||
               verTodasJugadas ? (
                 <button
                   type="button"
-                  onClick={() => setVerTodasJugadas((v) => !v)}
+                  onClick={() => {
+                    setHistorialPageIdx(0);
+                    setVerTodasJugadas((v) => !v);
+                  }}
                   className="text-[11px] font-medium text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-200"
                 >
                   {verTodasJugadas
                     ? "Solo última jugada"
-                    : `Ver historial (${simulaciones.length})`}
+                    : `Ver historial (${paginasHistorial.length} jugadas)`}
                 </button>
               ) : null}
               <button
@@ -582,6 +640,52 @@ export function SimuladorJugadas({
               </button>
             </div>
           </div>
+
+          {openJugadas && verTodasJugadas && paginasHistorial.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/50 px-3.5 py-2 text-xs">
+              <button
+                type="button"
+                onClick={() =>
+                  setHistorialPageIdx((i) => Math.max(0, i - 1))
+                }
+                disabled={safePageIdx === 0}
+                className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2.5 py-1 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 disabled:opacity-40"
+              >
+                ← Más reciente
+              </button>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-zinc-500">
+                  Jugada {safePageIdx + 1} de {paginasHistorial.length}:
+                </span>
+                <select
+                  value={safePageIdx}
+                  onChange={(e) => setHistorialPageIdx(Number(e.target.value))}
+                  className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1 text-[11px] font-medium text-zinc-800 dark:text-zinc-200"
+                >
+                  {paginasHistorial.map((p, idx) => (
+                    <option key={p.key} value={idx}>
+                      {p.fecha} · {TURNOS_CONFIG[p.turno].nombre} (
+                      {p.items.length})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setHistorialPageIdx((i) =>
+                    Math.min(paginasHistorial.length - 1, i + 1)
+                  )
+                }
+                disabled={safePageIdx >= paginasHistorial.length - 1}
+                className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2.5 py-1 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 disabled:opacity-40"
+              >
+                Anterior →
+              </button>
+            </div>
+          )}
 
           {openJugadas && (
           <table className="w-full border-collapse border-t border-zinc-100 dark:border-zinc-800 text-left text-xs">
@@ -630,10 +734,16 @@ export function SimuladorJugadas({
                         className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                           sim.estrategia === "atrasados"
                             ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-200"
-                            : "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200"
+                            : sim.estrategia === "eco"
+                              ? "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200"
+                              : "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200"
                         }`}
                       >
-                        {sim.estrategia === "atrasados" ? "Atrasado" : "Candidato"}
+                        {sim.estrategia === "atrasados"
+                          ? "Atrasado"
+                          : sim.estrategia === "eco"
+                            ? "Eco & Eq."
+                            : "Candidato"}
                       </span>
                     </span>
                   </td>

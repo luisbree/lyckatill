@@ -19,7 +19,7 @@ const CreateSimulacionesSchema = z.object({
         loteria: LoteriaIdSchema,
         numero: z.string().regex(/^\d{2,3}$/, "Debe tener 2 o 3 dígitos"),
         cifras: z.union([z.literal(2), z.literal(3)]).optional(),
-        estrategia: z.enum(["candidatos", "atrasados"]).optional(),
+        estrategia: z.enum(["candidatos", "atrasados", "eco"]).optional(),
         multiplicadorPremio: z.number().positive().max(10_000).optional(),
       })
     )

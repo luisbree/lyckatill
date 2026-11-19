@@ -15,6 +15,7 @@ export interface LoteriaBalanceRow {
   total: GrupoBalance;
   candidatos: GrupoBalance;
   atrasados: GrupoBalance;
+  eco: GrupoBalance;
   tresCifras: GrupoBalance;
   dosCifras: GrupoBalance;
 }
@@ -23,6 +24,7 @@ export interface BalanceDetallado {
   global: {
     candidatos: GrupoBalance;
     atrasados: GrupoBalance;
+    eco: GrupoBalance;
     tresCifras: GrupoBalance;
     dosCifras: GrupoBalance;
   };
@@ -66,6 +68,7 @@ export function calcularBalanceDetallado(
   const esCandidato = (s: SimulacionEvaluada) =>
     (s.estrategia ?? "candidatos") === "candidatos";
   const esAtrasado = (s: SimulacionEvaluada) => s.estrategia === "atrasados";
+  const esEco = (s: SimulacionEvaluada) => s.estrategia === "eco";
   const es3C = (s: SimulacionEvaluada) =>
     (s.cifras ?? s.numero.length) === 3;
   const es2C = (s: SimulacionEvaluada) =>
@@ -78,6 +81,7 @@ export function calcularBalanceDetallado(
       total: sumarGrupo(deLoteria),
       candidatos: sumarGrupo(deLoteria.filter(esCandidato)),
       atrasados: sumarGrupo(deLoteria.filter(esAtrasado)),
+      eco: sumarGrupo(deLoteria.filter(esEco)),
       tresCifras: sumarGrupo(deLoteria.filter(es3C)),
       dosCifras: sumarGrupo(deLoteria.filter(es2C)),
     };
@@ -87,6 +91,7 @@ export function calcularBalanceDetallado(
     global: {
       candidatos: sumarGrupo(simulaciones.filter(esCandidato)),
       atrasados: sumarGrupo(simulaciones.filter(esAtrasado)),
+      eco: sumarGrupo(simulaciones.filter(esEco)),
       tresCifras: sumarGrupo(simulaciones.filter(es3C)),
       dosCifras: sumarGrupo(simulaciones.filter(es2C)),
     },

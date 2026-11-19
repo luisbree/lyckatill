@@ -442,6 +442,47 @@ export function ResultadosBoard() {
               })}
               <td className="px-3 py-3.5" />
             </tr>
+            <tr className={`border-t ${theme.cardBorder} bg-white/80 dark:bg-zinc-950/80`}>
+              <td className="px-4 py-3.5 align-middle">
+                <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  Eco &amp; Equilibrio
+                </div>
+                <div className="text-[11px] text-zinc-500">
+                  Markov-2 · Déficit · Par/Rango
+                </div>
+              </td>
+              {LOTERIA_IDS.map((loteriaId: LoteriaId) => {
+                const stat = atrasos?.[loteriaId];
+                if (!stat) {
+                  return (
+                    <td
+                      key={loteriaId}
+                      className="px-4 py-3.5 text-center text-xs text-zinc-400"
+                    >
+                      —
+                    </td>
+                  );
+                }
+
+                const c = stat.ecoCentena[0];
+                const d = stat.ecoDecena[0];
+                const u = stat.ecoUnidad[0];
+                const codigo = `${c?.digito ?? "0"}${d?.digito ?? "0"}${u?.digito ?? "0"}`;
+                const title = `Eco & Equilibrio C:${c?.digito} (${c?.score}) · D:${d?.digito} (${d?.score}) · U:${u?.digito} (${u?.score})`;
+
+                return (
+                  <td key={loteriaId} className="px-3 py-3 text-center">
+                    <span
+                      title={title}
+                      className={`inline-flex rounded-xl px-3.5 py-1.5 font-mono text-lg font-extrabold tracking-widest ${theme.ecoBadge}`}
+                    >
+                      {codigo}
+                    </span>
+                  </td>
+                );
+              })}
+              <td className="px-3 py-3.5" />
+            </tr>
           </tfoot>
         </table>
       </div>

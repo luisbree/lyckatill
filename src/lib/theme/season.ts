@@ -15,6 +15,7 @@ export interface SeasonTheme {
   atrasadoPill: string;
   atrasadoCardHighlight: string;
   candidatoBadge: string;
+  ecoBadge: string;
 }
 
 export const SEASON_THEMES: Record<SeasonId, SeasonTheme> = {
@@ -42,6 +43,8 @@ export const SEASON_THEMES: Record<SeasonId, SeasonTheme> = {
       "bg-gradient-to-r from-rose-100 to-amber-100 border border-rose-300 text-rose-950 dark:from-rose-950/60 dark:to-amber-950/50 dark:border-rose-700 dark:text-rose-100",
     candidatoBadge:
       "bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-md shadow-violet-500/20 ring-2 ring-violet-300/80 dark:ring-violet-700/80",
+    ecoBadge:
+      "bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-md shadow-cyan-500/20 ring-2 ring-cyan-300/80 dark:ring-cyan-700/80",
   },
   verano: {
     id: "verano",
@@ -66,6 +69,8 @@ export const SEASON_THEMES: Record<SeasonId, SeasonTheme> = {
       "bg-gradient-to-r from-amber-100 to-orange-100 border border-amber-300 text-amber-950 dark:from-amber-950/60 dark:to-orange-950/50 dark:border-amber-700 dark:text-amber-100",
     candidatoBadge:
       "bg-gradient-to-br from-teal-500 to-cyan-600 text-white shadow-md shadow-teal-500/20 ring-2 ring-teal-300/80 dark:ring-teal-700/80",
+    ecoBadge:
+      "bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-md shadow-indigo-500/20 ring-2 ring-indigo-300/80 dark:ring-indigo-700/80",
   },
   otono: {
     id: "otono",
@@ -91,6 +96,8 @@ export const SEASON_THEMES: Record<SeasonId, SeasonTheme> = {
       "bg-gradient-to-r from-orange-100 to-red-100 border border-orange-300 text-orange-950 dark:from-orange-950/60 dark:to-red-950/50 dark:border-orange-700 dark:text-orange-100",
     candidatoBadge:
       "bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/20 ring-2 ring-emerald-300/80 dark:ring-emerald-700/80",
+    ecoBadge:
+      "bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-md shadow-purple-500/20 ring-2 ring-purple-300/80 dark:ring-purple-700/80",
   },
   invierno: {
     id: "invierno",
@@ -116,6 +123,8 @@ export const SEASON_THEMES: Record<SeasonId, SeasonTheme> = {
       "bg-gradient-to-r from-indigo-100 to-violet-100 border border-indigo-300 text-indigo-950 dark:from-indigo-950/60 dark:to-violet-950/50 dark:border-indigo-700 dark:text-indigo-100",
     candidatoBadge:
       "bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-md shadow-sky-500/20 ring-2 ring-sky-300/80 dark:ring-sky-700/80",
+    ecoBadge:
+      "bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-md shadow-teal-500/20 ring-2 ring-teal-300/80 dark:ring-teal-700/80",
   },
 };
 

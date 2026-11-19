@@ -6,7 +6,7 @@ import { LOTERIA_IDS, type LoteriaId, type TurnoId } from "./types";
 export const SIMULACIONES_COLLECTION = "simulaciones";
 
 export type EstadoSimulacion = "activa" | "acertada" | "cerrada";
-export type EstrategiaSimulacion = "candidatos" | "atrasados";
+export type EstrategiaSimulacion = "candidatos" | "atrasados" | "eco";
 
 export interface SimulacionDocument {
   id: string;
@@ -225,7 +225,15 @@ export function evaluarSimulaciones(
     if (lotDiff !== 0) return lotDiff;
 
     if (a.estrategia !== b.estrategia) {
-      return a.estrategia === "candidatos" ? -1 : 1;
+      const order: Record<EstrategiaSimulacion, number> = {
+        candidatos: 0,
+        atrasados: 1,
+        eco: 2,
+      };
+      return (
+        order[a.estrategia ?? "candidatos"] -
+        order[b.estrategia ?? "candidatos"]
+      );
     }
     return (b.cifras ?? b.numero.length) - (a.cifras ?? a.numero.length);
   });

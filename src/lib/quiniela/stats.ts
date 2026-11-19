@@ -37,6 +37,15 @@ export interface CandidatoDigito {
   freqReciente: number; // 0..1
 }
 
+export interface EcoDigito {
+  digito: string;
+  score: number; // 0..100
+  markov2Prob: number;
+  deficit50: number;
+  paridadRangoProb: number;
+  ecoModalProb: number;
+}
+
 export interface LoteriaAtrasos {
   totalSorteos: number;
   centena: DigitoAtraso;
@@ -48,6 +57,9 @@ export interface LoteriaAtrasos {
   candidatoCentena: CandidatoDigito[];
   candidatoDecena: CandidatoDigito[];
   candidatoUnidad: CandidatoDigito[];
+  ecoCentena: EcoDigito[];
+  ecoDecena: EcoDigito[];
+  ecoUnidad: EcoDigito[];
 }
 
 export type AtrasosPorLoteria = Record<LoteriaId, LoteriaAtrasos | null>;
@@ -252,6 +264,137 @@ function calcularCandidatos(
 }
 
 /**
+ * Modelo B ("Eco & Equilibrio"):
+ * 35% Markov orden 2 (bigrama) · 30% Déficit en ventana de 50 ·
+ * 20% Dinámica Par/Impar y Bajo/Alto · 15% Eco de distancia modal.
+ */
+function calcularEcoEquilibrio(digitosEnOrdenAsc: string[]): EcoDigito[] {
+  const total = digitosEnOrdenAsc.length;
+  const ultimo = digitosEnOrdenAsc[total - 1];
+  const anteultimo = total >= 2 ? digitosEnOrdenAsc[total - 2] : ultimo;
+
+  // 1. Markov orden 2 (bigrama: anteultimo + ultimo -> siguiente)
+  const bigramCounts = new Map<string, number>();
+  let bigramTotal = 0;
+  for (let i = 0; i < total - 2; i++) {
+    if (
+      digitosEnOrdenAsc[i] === anteultimo &&
+      digitosEnOrdenAsc[i + 1] === ultimo
+    ) {
+      const next = digitosEnOrdenAsc[i + 2];
+      bigramCounts.set(next, (bigramCounts.get(next) ?? 0) + 1);
+      bigramTotal++;
+    }
+  }
+
+  // 2. Ventana mediana de 50 sorteos para déficit
+  const ventana50 = digitosEnOrdenAsc.slice(-50);
+  const esperado50 = ventana50.length * 0.1;
+
+  // 3. Dinámica Par/Impar y Bajo(0-4)/Alto(5-9)
+  const ultimoEsPar = Number(ultimo) % 2 === 0;
+  const ultimoEsAlto = Number(ultimo) >= 5;
+  let parSameCount = 0;
+  let parSameTotal = 0;
+  let altoSameCount = 0;
+  let altoSameTotal = 0;
+
+  for (let i = 0; i < total - 1; i++) {
+    const curPar = Number(digitosEnOrdenAsc[i]) % 2 === 0;
+    const nextPar = Number(digitosEnOrdenAsc[i + 1]) % 2 === 0;
+    if (curPar === ultimoEsPar) {
+      parSameTotal++;
+      if (nextPar === curPar) parSameCount++;
+    }
+
+    const curAlto = Number(digitosEnOrdenAsc[i]) >= 5;
+    const nextAlto = Number(digitosEnOrdenAsc[i + 1]) >= 5;
+    if (curAlto === ultimoEsAlto) {
+      altoSameTotal++;
+      if (nextAlto === curAlto) altoSameCount++;
+    }
+  }
+
+  const probMantieneParidad = (parSameCount + 1) / (parSameTotal + 2);
+  const probMantieneRango = (altoSameCount + 1) / (altoSameTotal + 2);
+
+  // 4. Eco de distancia modal (índices por dígito)
+  const indicesPorDigito = new Map<string, number[]>();
+  for (let n = 0; n <= 9; n++) indicesPorDigito.set(String(n), []);
+  for (let i = 0; i < total; i++) {
+    indicesPorDigito.get(digitosEnOrdenAsc[i])?.push(i);
+  }
+
+  const rawMarkov2: number[] = [];
+  const rawDeficit: number[] = [];
+  const rawParRango: number[] = [];
+  const rawEcoModal: number[] = [];
+
+  for (let n = 0; n <= 9; n++) {
+    const d = String(n);
+    const markov2 = ((bigramCounts.get(d) ?? 0) + 1) / (bigramTotal + 10);
+
+    const count50 = ventana50.filter((x) => x === d).length;
+    const deficit = esperado50 - count50;
+
+    const dEsPar = n % 2 === 0;
+    const dEsAlto = n >= 5;
+    const pPar =
+      dEsPar === ultimoEsPar ? probMantieneParidad : 1 - probMantieneParidad;
+    const pRango =
+      dEsAlto === ultimoEsAlto ? probMantieneRango : 1 - probMantieneRango;
+    const parRango = (pPar + pRango) / 2;
+
+    const idxs = indicesPorDigito.get(d) ?? [];
+    let ecoModal = 0;
+    if (idxs.length >= 2) {
+      const targetGap = total - idxs[idxs.length - 1]; // distancia si sale en el próximo
+      let hits = 0;
+      const totalGaps = idxs.length - 1;
+      for (let j = 1; j < idxs.length; j++) {
+        const gap = idxs[j] - idxs[j - 1];
+        if (Math.abs(gap - targetGap) <= 1) {
+          hits++;
+        }
+      }
+      ecoModal = hits / totalGaps;
+    }
+
+    rawMarkov2.push(markov2);
+    rawDeficit.push(deficit);
+    rawParRango.push(parRango);
+    rawEcoModal.push(ecoModal);
+  }
+
+  const normMarkov2 = minMaxNormalize(rawMarkov2);
+  const normDeficit = minMaxNormalize(rawDeficit);
+  const normParRango = minMaxNormalize(rawParRango);
+  const normEcoModal = minMaxNormalize(rawEcoModal);
+
+  const resultados: EcoDigito[] = [];
+  for (let n = 0; n <= 9; n++) {
+    const score =
+      (0.35 * normMarkov2[n] +
+        0.3 * normDeficit[n] +
+        0.2 * normParRango[n] +
+        0.15 * normEcoModal[n]) *
+      100;
+
+    resultados.push({
+      digito: String(n),
+      score: Number(score.toFixed(1)),
+      markov2Prob: Number(rawMarkov2[n].toFixed(3)),
+      deficit50: Number(rawDeficit[n].toFixed(1)),
+      paridadRangoProb: Number(rawParRango[n].toFixed(3)),
+      ecoModalProb: Number(rawEcoModal[n].toFixed(3)),
+    });
+  }
+
+  resultados.sort((a, b) => b.score - a.score);
+  return resultados;
+}
+
+/**
  * Calcula, para cada lotería y sin discriminar por horario, el dígito decimal (0-9)
  * más atrasado, el ranking de tiempo promedio de retorno y los candidatos ponderados.
  */
@@ -317,6 +460,9 @@ export function calcularAtrasosPorLoteria(
       candidatoCentena: calcularCandidatos(centenasAsc, rankingCentena),
       candidatoDecena: calcularCandidatos(decenasAsc, rankingDecena),
       candidatoUnidad: calcularCandidatos(unidadesAsc, rankingUnidad),
+      ecoCentena: calcularEcoEquilibrio(centenasAsc),
+      ecoDecena: calcularEcoEquilibrio(decenasAsc),
+      ecoUnidad: calcularEcoEquilibrio(unidadesAsc),
     };
   }
 
