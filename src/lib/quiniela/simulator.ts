@@ -6,7 +6,11 @@ import { LOTERIA_IDS, type LoteriaId, type TurnoId } from "./types";
 export const SIMULACIONES_COLLECTION = "simulaciones";
 
 export type EstadoSimulacion = "activa" | "acertada" | "cerrada";
-export type EstrategiaSimulacion = "candidatos" | "atrasados" | "eco";
+export type EstrategiaSimulacion =
+  | "candidatos"
+  | "atrasados"
+  | "eco"
+  | "ambos_atrasados";
 
 export interface SimulacionDocument {
   id: string;
@@ -70,21 +74,27 @@ export async function createSimulacionesBatch(
   items: Array<Omit<SimulacionDocument, "id" | "creadoEn" | "estado">>
 ): Promise<SimulacionDocument[]> {
   const now = new Date().toISOString();
-  const batch = adminDb.batch();
   const created: SimulacionDocument[] = [];
+  const CHUNK_SIZE = 400;
 
-  for (const item of items) {
-    const ref = adminDb.collection(SIMULACIONES_COLLECTION).doc();
-    const docData: Omit<SimulacionDocument, "id"> = {
-      ...item,
-      estado: "activa",
-      creadoEn: now,
-    };
-    batch.set(ref, docData);
-    created.push({ id: ref.id, ...docData });
+  for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+    const slice = items.slice(i, i + CHUNK_SIZE);
+    const batch = adminDb.batch();
+
+    for (const item of slice) {
+      const ref = adminDb.collection(SIMULACIONES_COLLECTION).doc();
+      const docData: Omit<SimulacionDocument, "id"> = {
+        ...item,
+        estado: "activa",
+        creadoEn: now,
+      };
+      batch.set(ref, docData);
+      created.push({ id: ref.id, ...docData });
+    }
+
+    await batch.commit();
   }
 
-  await batch.commit();
   return created;
 }
 
@@ -229,6 +239,7 @@ export function evaluarSimulaciones(
         candidatos: 0,
         atrasados: 1,
         eco: 2,
+        ambos_atrasados: 3,
       };
       return (
         order[a.estrategia ?? "candidatos"] -

@@ -109,6 +109,8 @@ export function SimuladorJugadas({
   const [usarCandidatos, setUsarCandidatos] = useState<boolean>(true);
   const [usarAtrasados, setUsarAtrasados] = useState<boolean>(true);
   const [usarEco, setUsarEco] = useState<boolean>(true);
+  const [usarAmbosAtrasados, setUsarAmbosAtrasados] = useState<boolean>(false);
+  const [modelosOpen, setModelosOpen] = useState<boolean>(false);
   const [usar3Cifras, setUsar3Cifras] = useState<boolean>(true);
   const [usar2Cifras, setUsar2Cifras] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
@@ -189,10 +191,28 @@ export function SimuladorJugadas({
     : undefined;
   const loteriasDelTurno = getLoteriasParaTurno(turnoInicio, dayOfWeek);
 
+  const modelosDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        modelosDropdownRef.current &&
+        !modelosDropdownRef.current.contains(e.target as Node)
+      ) {
+        setModelosOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   async function handleCrearSimulacion() {
     if (!atrasos) return;
-    if (!usarCandidatos && !usarAtrasados && !usarEco) return;
-    if (!usar3Cifras && !usar2Cifras) return;
+    const hayEstrategiaEstandar = usarCandidatos || usarAtrasados || usarEco;
+    const hayCifrasEstandar = usar3Cifras || usar2Cifras;
+    if ((!hayEstrategiaEstandar || !hayCifrasEstandar) && !usarAmbosAtrasados) {
+      return;
+    }
 
     const jugadas = loteriasDelTurno.flatMap((loteriaCfg) => {
       const loteriaId = loteriaCfg.id;
@@ -262,6 +282,30 @@ export function SimuladorJugadas({
         }
       }
 
+      // Nuevo modelo: 20 ambos (10 con unidad más atrasada + 10 con decena más atrasada), solo 2 cifras
+      if (usarAmbosAtrasados) {
+        const u = stat.unidad.digito;
+        const d = stat.decena.digito;
+        for (let i = 0; i <= 9; i++) {
+          items.push({
+            loteria: loteriaId,
+            numero: `${i}${u}`,
+            cifras: 2,
+            estrategia: "ambos_atrasados",
+            multiplicadorPremio: multiplicador2C,
+          });
+        }
+        for (let i = 0; i <= 9; i++) {
+          items.push({
+            loteria: loteriaId,
+            numero: `${d}${i}`,
+            cifras: 2,
+            estrategia: "ambos_atrasados",
+            multiplicadorPremio: multiplicador2C,
+          });
+        }
+      }
+
       return items;
     });
 
@@ -324,10 +368,16 @@ export function SimuladorJugadas({
   const cantidadLoteriasDisponibles = atrasos
     ? loteriasDelTurno.filter((cfg) => Boolean(atrasos[cfg.id])).length
     : 0;
+  const modelosActivosCount =
+    (usarCandidatos ? 1 : 0) +
+    (usarAtrasados ? 1 : 0) +
+    (usarEco ? 1 : 0) +
+    (usarAmbosAtrasados ? 1 : 0);
   const totalJugadasPreview =
     cantidadLoteriasDisponibles *
-    ((usarCandidatos ? 1 : 0) + (usarAtrasados ? 1 : 0) + (usarEco ? 1 : 0)) *
-    ((usar3Cifras ? 1 : 0) + (usar2Cifras ? 1 : 0));
+      ((usarCandidatos ? 1 : 0) + (usarAtrasados ? 1 : 0) + (usarEco ? 1 : 0)) *
+      ((usar3Cifras ? 1 : 0) + (usar2Cifras ? 1 : 0)) +
+    (usarAmbosAtrasados ? cantidadLoteriasDisponibles * 20 : 0);
 
   const simulacionesActivasLista = simulaciones.filter((s) => !s.archivada);
   const ultimoTurnoJugado = simulacionesActivasLista[0]
@@ -504,35 +554,63 @@ export function SimuladorJugadas({
 
         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-zinc-100 dark:border-zinc-800 pt-3">
           <div className="flex flex-wrap items-center gap-6 text-xs text-zinc-700 dark:text-zinc-300">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="font-semibold text-zinc-500">Set:</span>
-              <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={usarCandidatos}
-                  onChange={(e) => setUsarCandidatos(e.target.checked)}
-                  className="rounded border-zinc-300"
-                />
-                <span>Candidatos</span>
-              </label>
-              <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={usarAtrasados}
-                  onChange={(e) => setUsarAtrasados(e.target.checked)}
-                  className="rounded border-zinc-300"
-                />
-                <span>Más atrasados</span>
-              </label>
-              <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={usarEco}
-                  onChange={(e) => setUsarEco(e.target.checked)}
-                  className="rounded border-zinc-300"
-                />
-                <span>Eco &amp; Equilibrio</span>
-              </label>
+            <div ref={modelosDropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setModelosOpen((v) => !v)}
+                className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              >
+                <span>Modelos ({modelosActivosCount}/4)</span>
+                <span className="text-[10px] text-zinc-400">
+                  {modelosOpen ? "▴" : "▾"}
+                </span>
+              </button>
+
+              {modelosOpen && (
+                <div className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 p-2.5 shadow-lg space-y-2">
+                  <label className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-900 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={usarCandidatos}
+                      onChange={(e) => setUsarCandidatos(e.target.checked)}
+                      className="rounded border-zinc-300"
+                    />
+                    <span>Candidatos</span>
+                  </label>
+                  <label className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-900 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={usarAtrasados}
+                      onChange={(e) => setUsarAtrasados(e.target.checked)}
+                      className="rounded border-zinc-300"
+                    />
+                    <span>Más atrasados</span>
+                  </label>
+                  <label className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-900 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={usarEco}
+                      onChange={(e) => setUsarEco(e.target.checked)}
+                      className="rounded border-zinc-300"
+                    />
+                    <span>Eco &amp; Equilibrio</span>
+                  </label>
+                  <label className="flex items-start gap-2 rounded-md px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-900 cursor-pointer border-t border-zinc-100 dark:border-zinc-800 pt-2">
+                    <input
+                      type="checkbox"
+                      checked={usarAmbosAtrasados}
+                      onChange={(e) => setUsarAmbosAtrasados(e.target.checked)}
+                      className="mt-0.5 rounded border-zinc-300"
+                    />
+                    <span>
+                      <span className="block font-medium">Ambos atrasados</span>
+                      <span className="block text-[10px] text-zinc-400">
+                        20 números/lotería · solo 2 cifras
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -736,14 +814,18 @@ export function SimuladorJugadas({
                             ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-200"
                             : sim.estrategia === "eco"
                               ? "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200"
-                              : "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200"
+                              : sim.estrategia === "ambos_atrasados"
+                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
+                                : "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200"
                         }`}
                       >
                         {sim.estrategia === "atrasados"
                           ? "Atrasado"
                           : sim.estrategia === "eco"
                             ? "Eco & Eq."
-                            : "Candidato"}
+                            : sim.estrategia === "ambos_atrasados"
+                              ? "Ambos Atr."
+                              : "Candidato"}
                       </span>
                     </span>
                   </td>

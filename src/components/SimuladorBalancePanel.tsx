@@ -193,7 +193,7 @@ export function SimuladorBalancePanel({
             </div>
 
             {simulaciones.length > 0 && (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <BalanceMetricCard
                   titulo="Candidatos"
                   subtitulo="Todas las loterías"
@@ -210,6 +210,12 @@ export function SimuladorBalancePanel({
                   titulo="Eco & Equilibrio"
                   subtitulo="Todas las loterías"
                   grupo={balance.global.eco}
+                  theme={theme}
+                />
+                <BalanceMetricCard
+                  titulo="Ambos atrasados"
+                  subtitulo="Solo 2 cifras (20/lot.)"
+                  grupo={balance.global.ambosAtrasados}
                   theme={theme}
                 />
                 <BalanceMetricCard
@@ -266,6 +272,9 @@ export function SimuladorBalancePanel({
                     Eco &amp; Eq.
                   </th>
                   <th className="px-3 py-2 font-semibold text-right">
+                    Ambos Atr.
+                  </th>
+                  <th className="px-3 py-2 font-semibold text-right">
                     3 cifras
                   </th>
                   <th className="px-3 py-2 font-semibold text-right">
@@ -283,6 +292,7 @@ export function SimuladorBalancePanel({
                     <CeldaBalance grupo={row.candidatos} />
                     <CeldaBalance grupo={row.atrasados} />
                     <CeldaBalance grupo={row.eco} />
+                    <CeldaBalance grupo={row.ambosAtrasados} />
                     <CeldaBalance grupo={row.tresCifras} />
                     <CeldaBalance grupo={row.dosCifras} />
                     <CeldaBalance grupo={row.total} />
