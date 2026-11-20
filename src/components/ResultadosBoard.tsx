@@ -129,6 +129,36 @@ export function ResultadosBoard() {
     }
   }
 
+  function cambiarDia(offset: number) {
+    setLoading(true);
+    setFecha((current) => {
+      const base =
+        current && /^\d{4}-\d{2}-\d{2}$/.test(current)
+          ? current
+          : new Date().toISOString().slice(0, 10);
+      const [y, m, d] = base.split("-").map(Number);
+      const date = new Date(Date.UTC(y, m - 1, d));
+      date.setUTCDate(date.getUTCDate() + offset);
+      return date.toISOString().slice(0, 10);
+    });
+  }
+
+  function irAHoy() {
+    const hoy = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
+    setLoading(true);
+    if (fecha !== hoy) {
+      setFecha(hoy);
+    } else {
+      setRefreshTick((t) => t + 1);
+    }
+  }
+
   const theme = useMemo(
     () => SEASON_THEMES[getSeasonFromFecha(fecha)],
     [fecha]
@@ -211,6 +241,61 @@ export function ResultadosBoard() {
             {collectingTarget === "all"
               ? "Recolectando..."
               : "Recolectar día"}
+          </button>
+
+          {/* Chevrones horizontales para navegar día anterior y posterior */}
+          <div className="flex items-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs overflow-hidden">
+            <button
+              type="button"
+              onClick={() => cambiarDia(-1)}
+              disabled={loading}
+              className="p-1.5 px-2.5 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-40 transition-colors border-r border-zinc-200 dark:border-zinc-800"
+              title="Día anterior"
+              aria-label="Día anterior"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => cambiarDia(1)}
+              disabled={loading}
+              className="p-1.5 px-2.5 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-40 transition-colors"
+              title="Día posterior"
+              aria-label="Día posterior"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Botón Hoy para volver a la fecha actual */}
+          <button
+            type="button"
+            onClick={irAHoy}
+            disabled={loading}
+            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-colors shadow-xs"
+            title="Ir a la fecha actual"
+          >
+            Hoy
           </button>
         </div>
 
