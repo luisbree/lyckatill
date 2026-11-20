@@ -18,7 +18,11 @@ export const metadata: Metadata = {
     "Resultados de Quiniela de Ciudad, Provincia, Córdoba, Santa Fe, Mendoza, Entre Ríos y Uruguay",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="es"

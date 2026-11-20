@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getLoteriasParaTurno,
   LOTERIAS_CONFIG,
@@ -12,7 +12,7 @@ import type {
   SimulacionEvaluada,
 } from "@/lib/quiniela/simulator";
 import type { AtrasosPorLoteria } from "@/lib/quiniela/stats";
-import { TURNO_IDS, type TurnoId } from "@/lib/quiniela/types";
+import { LOTERIA_IDS, TURNO_IDS, type TurnoId } from "@/lib/quiniela/types";
 import type { SeasonTheme } from "@/lib/theme/season";
 import { SimuladorBalancePanel } from "./SimuladorBalancePanel";
 
@@ -417,15 +417,33 @@ export function SimuladorJugadas({
       : 0;
   const paginaHistorialActual = paginasHistorial[safePageIdx] ?? null;
 
-  const simulacionesVisibles = verTodasJugadas
-    ? (paginaHistorialActual?.items ?? [])
-    : ultimoTurnoJugado
-      ? simulacionesActivasLista.filter(
-          (s) =>
-            s.fechaInicio === ultimoTurnoJugado.fecha &&
-            s.turnoInicio === ultimoTurnoJugado.turno
-        )
-      : [];
+  const simulacionesVisibles = useMemo(() => {
+    const raw = verTodasJugadas
+      ? (paginaHistorialActual?.items ?? [])
+      : ultimoTurnoJugado
+        ? simulacionesActivasLista.filter(
+            (s) =>
+              s.fechaInicio === ultimoTurnoJugado.fecha &&
+              s.turnoInicio === ultimoTurnoJugado.turno
+          )
+        : [];
+
+    return [...raw].sort((a, b) => {
+      const lotDiff =
+        LOTERIA_IDS.indexOf(a.loteria) - LOTERIA_IDS.indexOf(b.loteria);
+      if (lotDiff !== 0) return lotDiff;
+
+      const numDiff = Number(a.numero) - Number(b.numero);
+      if (numDiff !== 0) return numDiff;
+
+      return a.numero.localeCompare(b.numero);
+    });
+  }, [
+    verTodasJugadas,
+    paginaHistorialActual,
+    ultimoTurnoJugado,
+    simulacionesActivasLista,
+  ]);
 
   return (
     <section

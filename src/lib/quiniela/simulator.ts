@@ -234,6 +234,11 @@ export function evaluarSimulaciones(
       LOTERIA_IDS.indexOf(a.loteria) - LOTERIA_IDS.indexOf(b.loteria);
     if (lotDiff !== 0) return lotDiff;
 
+    // Ordenar de menor a mayor el número apostado
+    const numDiff = Number(a.numero) - Number(b.numero);
+    if (numDiff !== 0) return numDiff;
+    if (a.numero !== b.numero) return a.numero.localeCompare(b.numero);
+
     if (a.estrategia !== b.estrategia) {
       const order: Record<EstrategiaSimulacion, number> = {
         candidatos: 0,
