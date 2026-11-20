@@ -10,7 +10,6 @@
     "backfill": "npx tsx scripts/backfill.ts"
   },
   "dependencies": {
-    "@next/swc-win32-x64-msvc": "^16.4.6",
     "cheerio": "^1.2.0",
     "firebase": "^13.4.0",
     "firebase-admin": "^14.5.1",
